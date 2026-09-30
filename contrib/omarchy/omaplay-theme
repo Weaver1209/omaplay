@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Omarchy theme-set hook for Omaplay
+# Install with: omarchy hook install theme-set contrib/omarchy/omaplay-theme
+
+set -euo pipefail
+
+STAGED_Colors="${HOME}/.local/state/omarchy/current/theme/colors.toml"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/omaplay"
+
+if [[ -f "$STAGED_Colors" ]]; then
+    mkdir -p "$CONFIG_DIR"
+    cp "$STAGED_Colors" "$CONFIG_DIR/omarchy.toml"
+fi
