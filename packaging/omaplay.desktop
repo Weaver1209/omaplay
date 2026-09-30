@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Omaplay
+GenericName=Video Player
+Comment=Fast, themed libmpv video player for Omarchy and Arch Linux
+Exec=omaplay %U
+Icon=multimedia-video-player
+Terminal=false
+Type=Application
+Categories=AudioVideo;Video;Player;GTK;
+MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;audio/mpeg;audio/flac;audio/ogg;
+StartupWMClass=org.omarchy.Omaplay
+Keywords=video;movie;player;mpv;omarchy;
