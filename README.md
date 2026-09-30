@@ -17,9 +17,10 @@ Fast, native GTK4/Libadwaita video player in Rust backed by `libmpv` (`mpv_rende
   - `.` / `,`: Frame step forward / backward
   - `a` / `v` / `V`: Cycle audio track / subtitle track / subtitle visibility (`z` / `x` for subtitle delay)
   - `p` / `t` / `c`: Slide-over drawer for Playlist Queue, Audio/Subtitle Tracks, and Chapters
+  - `p` / `t` / `c`: Slide-over drawer for Playlist Queue (with season folder & sibling episode auto-queueing), Audio/Subtitle Tracks, and Chapters
   - `r`: Cycle A-B loop points
   - `s` / `S`: Save screenshot to `~/Pictures/omaplay/`
-  - `o` / `u`: Open local media file / Open stream URL (`yt-dlp` / HTTP / HLS)
+  - `o` / `O` / `u`: Open local media file (auto-queues sibling season episodes) / Open season folder / Open stream URL (`yt-dlp` / HTTP / HLS)
   - `:`: Vim command bar (`:seek 01:30`, `:seek 50%`, `:speed 1.25`, `:vol 90`, `:sub-delay -0.2`, `:open <url>`, `:theme`, `:q`)
   - `?`: Two-column keybinding reference sheet
 - **Desktop Integration**: Full MPRIS2 D-Bus server (`org.mpris.MediaPlayer2.omaplay`), Wayland idle inhibitor (`hypridle`), and drag-and-drop for media files, URLs, and external `.srt`/`.ass`/`.vtt` subtitles.

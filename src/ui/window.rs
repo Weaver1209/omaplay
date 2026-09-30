@@ -9,7 +9,8 @@ use libadwaita::prelude::*;
 use crate::keymap::{PlayerAction, VimCommand, map_key_event, parse_vim_command};
 use crate::mpris::{MprisCommand, MprisServer};
 use crate::mpv::{
-    ChapterItem, MpvPlayer, PlayerEvent, ThumbnailFrame, ThumbnailGenerator, TrackItem, ffi,
+    ChapterItem, MpvPlayer, PlayerEvent, ThumbnailFrame, ThumbnailGenerator, TrackItem,
+    collect_media_in_dir, collect_sibling_episodes, ffi,
 };
 use crate::theme::{ThemePalette, ThemeWatcher, install_global_css};
 use crate::ui::dialogs::{
@@ -130,8 +131,62 @@ impl WindowContext {
             self.toast.show(&format!("Loaded subtitle: {}", short_name(trimmed)));
             return;
         }
+
+        let local_path = Path::new(trimmed);
+        if local_path.is_dir() {
+            let episodes = collect_media_in_dir(local_path, 3);
+            if episodes.is_empty() {
+                self.toast
+                    .show(&format!("No media files found in {}", short_name(trimmed)));
+                return;
+            }
+            self.has_media.set(true);
+            self.welcome.set_visible(false);
+            if append {
+                for ep in &episodes {
+                    self.player.playlist_append_silent(ep);
+                }
+                self.toast.show(&format!(
+                    "Queued {} episodes from {}",
+                    episodes.len(),
+                    short_name(trimmed)
+                ));
+            } else {
+                self.player.load_playlist_with_active(&episodes, 0);
+                self.paused.set(false);
+                self.hud.set_paused(false);
+                self.player.set_pause(false);
+                self.toast.show(&format!(
+                    "Playing {} · {} episodes",
+                    short_name(trimmed),
+                    episodes.len()
+                ));
+            }
+            self.record_user_activity();
+            return;
+        }
+
         self.has_media.set(true);
         self.welcome.set_visible(false);
+
+        if !append && local_path.is_file() {
+            let (siblings, active_idx) = collect_sibling_episodes(local_path);
+            self.player.load_playlist_with_active(&siblings, active_idx);
+            self.paused.set(false);
+            self.hud.set_paused(false);
+            self.player.set_pause(false);
+            if siblings.len() > 1 {
+                self.toast.show(&format!(
+                    "Episode {} / {} · {}",
+                    active_idx + 1,
+                    siblings.len(),
+                    short_name(trimmed)
+                ));
+            }
+            self.record_user_activity();
+            return;
+        }
+
         self.player.load_file(trimmed, append);
         if append {
             self.toast
@@ -448,6 +503,9 @@ impl WindowContext {
             PlayerAction::OpenFileDialog => {
                 self.open_file_chooser(false);
             }
+            PlayerAction::OpenFolderDialog => {
+                self.open_folder_chooser(false);
+            }
             PlayerAction::OpenUrlDialog => {
                 self.url_dialog.open();
             }
@@ -541,6 +599,28 @@ impl WindowContext {
                             } else {
                                 ctx_clone.open_media(s, false);
                             }
+                        }
+                    }
+                }
+            },
+        );
+    }
+
+    pub fn open_folder_chooser(self: &Rc<Self>, append: bool) {
+        let dialog = gtk4::FileDialog::builder()
+            .title("Open Season / Playlist Folder")
+            .modal(true)
+            .build();
+
+        let ctx_clone = Rc::clone(self);
+        dialog.select_folder(
+            Some(&self.window),
+            gio::Cancellable::NONE,
+            move |res| {
+                if let Ok(folder) = res {
+                    if let Some(path) = folder.path() {
+                        if let Some(s) = path.to_str() {
+                            ctx_clone.open_media(s, append);
                         }
                     }
                 }
@@ -693,6 +773,7 @@ pub fn build_window(app: &libadwaita::Application, opts: LaunchOptions) -> Rc<Wi
             DrawerAction::RemovePlaylistIndex(idx) => ctx.player.playlist_remove(idx),
             DrawerAction::ClearPlaylist => ctx.player.playlist_clear(),
             DrawerAction::AddFile => ctx.open_file_chooser(false),
+            DrawerAction::AddFolder => ctx.open_folder_chooser(false),
             DrawerAction::OpenUrl => ctx.url_dialog.open(),
             DrawerAction::SelectAudioTrack(id) => ctx.player.select_track("audio", id),
             DrawerAction::SelectSubTrack(id) => ctx.player.select_track("sub", id),
@@ -714,12 +795,18 @@ pub fn build_window(app: &libadwaita::Application, opts: LaunchOptions) -> Rc<Wi
     });
 
     let slot_welcome_open = Rc::clone(&ctx_slot);
+    let slot_welcome_folder = Rc::clone(&ctx_slot);
     let slot_welcome_url = Rc::clone(&ctx_slot);
     let slot_welcome_keys = Rc::clone(&ctx_slot);
     let welcome = WelcomeOverlay::new(
         move || {
             if let Some(ctx) = slot_welcome_open.borrow().clone() {
                 ctx.open_file_chooser(false);
+            }
+        },
+        move || {
+            if let Some(ctx) = slot_welcome_folder.borrow().clone() {
+                ctx.open_folder_chooser(false);
             }
         },
         move || {

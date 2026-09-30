@@ -12,13 +12,15 @@ pub struct WelcomeOverlay {
 }
 
 impl WelcomeOverlay {
-    pub fn new<FOpen, FUrl, FKeymap>(
+    pub fn new<FOpen, FFolder, FUrl, FKeymap>(
         on_open_file: FOpen,
+        on_open_folder: FFolder,
         on_open_url: FUrl,
         on_keymap: FKeymap,
     ) -> Self
     where
         FOpen: Fn() + 'static,
+        FFolder: Fn() + 'static,
         FUrl: Fn() + 'static,
         FKeymap: Fn() + 'static,
     {
@@ -39,7 +41,7 @@ impl WelcomeOverlay {
         emblem.add_css_class("title-label");
 
         let sub = gtk4::Label::new(Some(
-            "Drop a video file, subtitle (.srt/.ass), or stream URL anywhere",
+            "Drop a video file, season folder, subtitle (.srt/.ass), or stream URL anywhere",
         ));
         sub.add_css_class("muted-label");
 
@@ -50,7 +52,11 @@ impl WelcomeOverlay {
         open_btn.add_css_class("hud-btn-primary");
         open_btn.connect_clicked(move |_| on_open_file());
 
-        let url_btn = gtk4::Button::with_label("Open Stream URL  [u]");
+        let folder_btn = gtk4::Button::with_label("Open Folder  [O]");
+        folder_btn.add_css_class("hud-btn");
+        folder_btn.connect_clicked(move |_| on_open_folder());
+
+        let url_btn = gtk4::Button::with_label("Stream URL  [u]");
         url_btn.add_css_class("hud-btn");
         url_btn.connect_clicked(move |_| on_open_url());
 
@@ -58,9 +64,9 @@ impl WelcomeOverlay {
         keys_btn.add_css_class("hud-btn");
         keys_btn.connect_clicked(move |_| on_keymap());
         btn_row.append(&open_btn);
+        btn_row.append(&folder_btn);
         btn_row.append(&url_btn);
         btn_row.append(&keys_btn);
-
         card.append(&emblem);
         card.append(&sub);
         card.append(&btn_row);

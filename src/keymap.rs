@@ -99,8 +99,8 @@ pub const KEYMAP_GROUPS: &[KeymapGroup] = &[
                 description: "Screenshot video / with subtitles",
             },
             KeybindingEntry {
-                keys: "o / u",
-                description: "Open local file / Open stream URL",
+                keys: "o / O / u",
+                description: "Open file / Open season folder / Stream URL",
             },
             KeybindingEntry {
                 keys: ":  ·  ?  ·  q",
@@ -135,6 +135,7 @@ pub enum PlayerAction {
     Screenshot { include_subs: bool },
     AbLoopCycle,
     OpenFileDialog,
+    OpenFolderDialog,
     OpenUrlDialog,
     PlaylistNext,
     PlaylistPrev,
@@ -257,7 +258,8 @@ pub fn map_key_event(keyval: Key, state: ModifierType) -> Option<PlayerAction> {
         return match keyval {
             Key::Left => Some(PlayerAction::PrevChapter),
             Key::Right => Some(PlayerAction::NextChapter),
-            Key::o | Key::O => Some(PlayerAction::OpenFileDialog),
+            Key::o => Some(PlayerAction::OpenFileDialog),
+            Key::O => Some(PlayerAction::OpenFolderDialog),
             Key::u | Key::U => Some(PlayerAction::OpenUrlDialog),
             Key::q | Key::Q => Some(PlayerAction::Quit),
             _ => None,
@@ -310,7 +312,8 @@ pub fn map_key_event(keyval: Key, state: ModifierType) -> Option<PlayerAction> {
         }),
         Key::S => Some(PlayerAction::Screenshot { include_subs: true }),
         Key::r | Key::R => Some(PlayerAction::AbLoopCycle),
-        Key::o | Key::O => Some(PlayerAction::OpenFileDialog),
+        Key::o => Some(PlayerAction::OpenFileDialog),
+        Key::O => Some(PlayerAction::OpenFolderDialog),
         Key::u | Key::U => Some(PlayerAction::OpenUrlDialog),
         Key::n | Key::greater => Some(PlayerAction::PlaylistNext),
         Key::N | Key::less => Some(PlayerAction::PlaylistPrev),

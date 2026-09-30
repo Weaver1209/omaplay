@@ -143,6 +143,7 @@ impl MpvPlayer {
         player.set_option_str("osc", "no")?;
         player.set_option_str("osd-level", "0")?;
         player.set_option_str("sub-auto", "fuzzy")?;
+        let _ = player.set_option_str("sub-file-paths", "Subs:Subtitles:subs:subtitles");
         player.set_option_str("audio-display", "no")?;
         player.set_option_str("screenshot-format", "png")?;
         player.set_option_str("screenshot-template", "%F-%P")?;
@@ -611,6 +612,27 @@ impl MpvPlayer {
         let _ = self.command(&["loadfile", uri_or_path, mode]);
     }
 
+    pub fn playlist_append_silent(&self, uri_or_path: &str) {
+        let _ = self.command(&["loadfile", uri_or_path, "append"]);
+    }
+
+    pub fn load_playlist_with_active(&self, files: &[String], active_idx: usize) {
+        if files.is_empty() {
+            return;
+        }
+        let target_idx = active_idx.min(files.len() - 1);
+        let _ = self.command(&["loadfile", &files[target_idx], "replace"]);
+        for (i, item) in files.iter().enumerate().take(target_idx) {
+            let _ = self.command(&["loadfile", item, "append"]);
+            let from = (i + 1).to_string();
+            let to = i.to_string();
+            let _ = self.command(&["playlist-move", &from, &to]);
+        }
+        for item in files.iter().skip(target_idx + 1) {
+            let _ = self.command(&["loadfile", item, "append"]);
+        }
+    }
+
     pub fn is_paused(&self) -> bool {
         self.get_property_str("pause").as_deref() == Some("yes")
     }
@@ -854,5 +876,171 @@ fn mpv_err_str(err: c_int) -> String {
         unsafe { CStr::from_ptr(ptr) }
             .to_string_lossy()
             .into_owned()
+    }
+}
+
+pub fn is_media_file(path: &std::path::Path) -> bool {
+    let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+        return false;
+    };
+    matches!(
+        ext.to_ascii_lowercase().as_str(),
+        "mkv"
+            | "mp4"
+            | "webm"
+            | "avi"
+            | "mov"
+            | "m4v"
+            | "ts"
+            | "m2ts"
+            | "flv"
+            | "wmv"
+            | "mpg"
+            | "mpeg"
+            | "ogv"
+            | "mp3"
+            | "flac"
+            | "m4a"
+            | "opus"
+            | "ogg"
+            | "wav"
+    )
+}
+
+pub fn collect_media_in_dir(dir: &std::path::Path, max_depth: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    collect_media_rec(dir, 0, max_depth, &mut out);
+    out.sort_by(|a, b| natural_cmp(a, b));
+    out
+}
+
+fn collect_media_rec(
+    dir: &std::path::Path,
+    depth: usize,
+    max_depth: usize,
+    out: &mut Vec<String>,
+) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut subdirs = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name();
+        if name.to_string_lossy().starts_with('.') {
+            continue;
+        }
+        if path.is_dir() {
+            if depth < max_depth {
+                subdirs.push(path);
+            }
+        } else if path.is_file() && is_media_file(&path) {
+            if let Some(s) = path.to_str() {
+                out.push(s.to_string());
+            }
+        }
+    }
+    subdirs.sort_by(|a, b| natural_cmp(&a.to_string_lossy(), &b.to_string_lossy()));
+    for sub in subdirs {
+        collect_media_rec(&sub, depth + 1, max_depth, out);
+    }
+}
+
+pub fn collect_sibling_episodes(file_path: &std::path::Path) -> (Vec<String>, usize) {
+    let canonical = file_path
+        .canonicalize()
+        .unwrap_or_else(|_| file_path.to_path_buf());
+    let Some(parent) = canonical.parent() else {
+        let s = canonical.to_string_lossy().into_owned();
+        return (vec![s], 0);
+    };
+    let siblings = collect_media_in_dir(parent, 0);
+    let target_str = canonical.to_string_lossy();
+    if siblings.is_empty() {
+        return (vec![target_str.into_owned()], 0);
+    }
+    let idx = siblings
+        .iter()
+        .position(|p| {
+            std::path::Path::new(p)
+                .canonicalize()
+                .map(|cp| cp == canonical)
+                .unwrap_or_else(|_| p == target_str.as_ref())
+        })
+        .unwrap_or(0);
+    (siblings, idx)
+}
+
+pub fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    let mut ia = a.chars().peekable();
+    let mut ib = b.chars().peekable();
+
+    loop {
+        match (ia.peek(), ib.peek()) {
+            (None, None) => return std::cmp::Ordering::Equal,
+            (None, Some(_)) => return std::cmp::Ordering::Less,
+            (Some(_), None) => return std::cmp::Ordering::Greater,
+            (Some(&ca), Some(&cb)) => {
+                if ca.is_ascii_digit() && cb.is_ascii_digit() {
+                    let mut na: u64 = 0;
+                    while let Some(&d) = ia.peek() {
+                        if let Some(digit) = d.to_digit(10) {
+                            na = na.saturating_mul(10).saturating_add(u64::from(digit));
+                            ia.next();
+                        } else {
+                            break;
+                        }
+                    }
+                    let mut nb: u64 = 0;
+                    while let Some(&d) = ib.peek() {
+                        if let Some(digit) = d.to_digit(10) {
+                            nb = nb.saturating_mul(10).saturating_add(u64::from(digit));
+                            ib.next();
+                        } else {
+                            break;
+                        }
+                    }
+                    match na.cmp(&nb) {
+                        std::cmp::Ordering::Equal => continue,
+                        non_eq => return non_eq,
+                    }
+                } else {
+                    let la = ca.to_ascii_lowercase();
+                    let lb = cb.to_ascii_lowercase();
+                    match la.cmp(&lb) {
+                        std::cmp::Ordering::Equal => {
+                            ia.next();
+                            ib.next();
+                        }
+                        non_eq => return non_eq,
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn natural_sort_orders_episodes_numerically() {
+        let mut eps = vec![
+            "The.Gentlemen.S02E10.mkv",
+            "The.Gentlemen.S02E2.mkv",
+            "The.Gentlemen.S02E01.mkv",
+            "The.Gentlemen.S01E08.mkv",
+        ];
+        eps.sort_by(|a, b| natural_cmp(a, b));
+        assert_eq!(
+            eps,
+            vec![
+                "The.Gentlemen.S01E08.mkv",
+                "The.Gentlemen.S02E01.mkv",
+                "The.Gentlemen.S02E2.mkv",
+                "The.Gentlemen.S02E10.mkv",
+            ]
+        );
     }
 }

@@ -20,6 +20,7 @@ pub enum DrawerAction {
     RemovePlaylistIndex(usize),
     ClearPlaylist,
     AddFile,
+    AddFolder,
     OpenUrl,
     SelectAudioTrack(Option<i64>),
     SelectSubTrack(Option<i64>),
@@ -39,6 +40,7 @@ pub struct SideDrawer {
     btn_tracks: gtk4::Button,
     btn_chapters: gtk4::Button,
     playlist_list: gtk4::Box,
+    playlist_status: gtk4::Label,
     audio_list: gtk4::Box,
     sub_list: gtk4::Box,
     chapters_list: gtk4::Box,
@@ -99,14 +101,26 @@ impl SideDrawer {
             .build();
 
         let playlist_page = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
+
+        let playlist_status = gtk4::Label::new(Some("QUEUE EMPTY"));
+        playlist_status.add_css_class("section-heading");
+        playlist_status.set_halign(gtk4::Align::Start);
+        playlist_status.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+        playlist_page.append(&playlist_status);
+
         let playlist_actions = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
 
-        let add_file_btn = gtk4::Button::with_label("+ Add File");
+        let add_file_btn = gtk4::Button::with_label("+ File [o]");
         add_file_btn.add_css_class("hud-btn-primary");
         let act_add = Rc::clone(&on_action_rc);
         add_file_btn.connect_clicked(move |_| act_add(DrawerAction::AddFile));
 
-        let add_url_btn = gtk4::Button::with_label("+ URL");
+        let add_folder_btn = gtk4::Button::with_label("+ Folder [O]");
+        add_folder_btn.add_css_class("hud-btn");
+        let act_folder = Rc::clone(&on_action_rc);
+        add_folder_btn.connect_clicked(move |_| act_folder(DrawerAction::AddFolder));
+
+        let add_url_btn = gtk4::Button::with_label("+ URL [u]");
         add_url_btn.add_css_class("hud-btn");
         let act_url = Rc::clone(&on_action_rc);
         add_url_btn.connect_clicked(move |_| act_url(DrawerAction::OpenUrl));
@@ -117,10 +131,10 @@ impl SideDrawer {
         clear_btn.connect_clicked(move |_| act_clear(DrawerAction::ClearPlaylist));
 
         playlist_actions.append(&add_file_btn);
+        playlist_actions.append(&add_folder_btn);
         playlist_actions.append(&add_url_btn);
         playlist_actions.append(&clear_btn);
         playlist_page.append(&playlist_actions);
-
         let playlist_scroll = gtk4::ScrolledWindow::builder()
             .hscrollbar_policy(gtk4::PolicyType::Never)
             .vexpand(true)
@@ -233,6 +247,7 @@ impl SideDrawer {
             btn_tracks: btn_tracks.clone(),
             btn_chapters: btn_chapters.clone(),
             playlist_list,
+            playlist_status,
             audio_list,
             sub_list,
             chapters_list,
@@ -302,11 +317,33 @@ impl SideDrawer {
     pub fn update_playlist(&self, entries: &[PlaylistEntry]) {
         clear_box(&self.playlist_list);
         if entries.is_empty() {
-            let empty = gtk4::Label::new(Some("Queue is empty"));
+            self.playlist_status.set_text("QUEUE EMPTY");
+            let empty = gtk4::Label::new(Some("Drop a file or season folder to queue episodes"));
             empty.add_css_class("muted-label");
             self.playlist_list.append(&empty);
             return;
         }
+
+        let active_pos = entries
+            .iter()
+            .position(|e| e.current || e.playing)
+            .map(|i| i + 1)
+            .unwrap_or(1);
+        let folder_hint = entries
+            .iter()
+            .find(|e| e.current || e.playing)
+            .or_else(|| entries.first())
+            .and_then(|e| Path::new(&e.filename).parent())
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or("PLAYLIST");
+        self.playlist_status.set_text(&format!(
+            "{}  ·  EPISODE {} / {}",
+            folder_hint.to_uppercase(),
+            active_pos,
+            entries.len()
+        ));
 
         for (idx, item) in entries.iter().enumerate() {
             let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
@@ -322,7 +359,11 @@ impl SideDrawer {
                         .to_string()
                 });
 
-            let prefix = if item.current || item.playing { "▶ " } else { "   " };
+            let prefix = if item.current || item.playing {
+                format!("▶ {:02}. ", idx + 1)
+            } else {
+                format!("   {:02}. ", idx + 1)
+            };
             let play_btn = gtk4::Button::with_label(&format!("{prefix}{display_name}"));
             play_btn.set_hexpand(true);
             if item.current || item.playing {
