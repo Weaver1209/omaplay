@@ -1,0 +1,28 @@
+# Maintainer: Weaver1209 <bombcyclone12@gmail.com>
+pkgname=omaplay
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Fast, themed libmpv video player for Omarchy and Arch Linux"
+arch=('x86_64')
+url="https://github.com/Weaver1209/omaplay"
+license=('MIT')
+depends=('gtk4' 'libadwaita' 'mpv' 'libglvnd')
+makedepends=('cargo' 'rust')
+optdepends=('yt-dlp: streaming playback from YouTube and other sites'
+            'ffmpeg: video thumbnail generation')
+options=('!lto' '!debug')
+
+build() {
+    :
+}
+
+package() {
+    cd "${startdir}/../../.."
+    install -Dm755 "target/release/omaplay" "${pkgdir}/usr/bin/omaplay"
+    install -Dm644 "LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+    install -Dm644 "README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+    install -Dm644 "packaging/omaplay.desktop" "${pkgdir}/usr/share/applications/omaplay.desktop"
+    install -Dm644 "packaging/icons/omaplay.svg" "${pkgdir}/usr/share/icons/hicolor/scalable/apps/omaplay.svg"
+    install -Dm644 "contrib/omarchy/omaplay.toml.tpl" "${pkgdir}/usr/share/omaplay/omarchy/omaplay.toml.tpl"
+    install -Dm755 "contrib/omarchy/omaplay-theme" "${pkgdir}/usr/share/omaplay/omarchy/omaplay-theme"
+}

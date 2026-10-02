@@ -4,4 +4,7 @@
 .vscode/
 .claude/
 /.cache/
+*.pkg.tar.zst
+pkg/
+src/
 /dist/
